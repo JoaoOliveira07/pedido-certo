@@ -1,18 +1,32 @@
 version: 2
 updates:
+  # Atualizações de versão maior (Spring Boot 4, Java 25, TypeScript 7...) são migrações:
+  # entram por decisão, com ADR, e não por PR automático.
   - package-ecosystem: maven
     directory: /api
     schedule: { interval: weekly }
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
-      spring: { patterns: ["org.springframework*"] }
+      maven-minor-and-patch: { update-types: [minor, patch] }
   - package-ecosystem: npm
     directory: /web
     schedule: { interval: weekly }
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
-      minor-and-patch: { update-types: [minor, patch] }
+      npm-minor-and-patch: { update-types: [minor, patch] }
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: monthly }
+    groups:
+      actions: { patterns: ["*"] }
   - package-ecosystem: docker
     directory: /api
     schedule: { interval: monthly }
+    ignore:
+      # a versão do Java acompanha o java.version do pom, não a imagem mais nova
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
