@@ -54,7 +54,7 @@ jobs:
       name: producao
       url: https://api-pedidos.jopes.com.br/actuator/health
     steps:
-      - uses: appleboy/ssh-action@v1.2.0
+      - uses: appleboy/ssh-action@v1.2.5
         env:
           SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
           TAG: ${{ needs.image.outputs.tag }}
