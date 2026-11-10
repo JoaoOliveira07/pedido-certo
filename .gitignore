@@ -1,0 +1,17 @@
+# Java
+api/target/
+*.class
+# Node
+web/node_modules/
+web/.next/
+web/out/
+web/*.tsbuildinfo
+web/next-env.d.ts
+# Ambiente
+.env
+.env*.local
+# IDE e SO
+.idea/
+*.iml
+.vscode/
+.DS_Store

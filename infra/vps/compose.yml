@@ -1,0 +1,65 @@
+# Stack de produção na VPS (/opt/jopes). O deploy do GitHub Actions baixa este arquivo e
+# o Caddyfile do commit publicado e roda `docker compose up -d`.
+#
+# Só o Caddy fica exposto (80/443). Postgres e API ficam na rede interna do Docker.
+name: jopes
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - pedido-certo-api
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pedidocerto
+      POSTGRES_USER: pedidocerto
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pedidocerto -d pedidocerto"]
+      interval: 10s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  pedido-certo-api:
+    image: ghcr.io/joaooliveira07/pedido-certo-api:${API_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/pedidocerto
+      DATABASE_USER: pedidocerto
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
+      PIX_WEBHOOK_SECRET: ${PIX_WEBHOOK_SECRET:?defina PIX_WEBHOOK_SECRET no .env}
+      CORS_ALLOWED_ORIGINS: https://pedidos.jopes.com.br
+    deploy:
+      resources:
+        limits:
+          # o heap usa 70% disto (MaxRAMPercentage no Dockerfile)
+          memory: 640m
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

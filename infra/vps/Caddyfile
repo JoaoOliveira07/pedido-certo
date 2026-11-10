@@ -1,0 +1,26 @@
+# O Caddy emite e renova os certificados HTTPS sozinho (Let's Encrypt).
+# Para um projeto novo: um bloco novo aqui e um registro DNS apontando para a VPS.
+api-pedidos.jopes.com.br {
+	encode zstd gzip
+
+	# métricas e detalhes de saúde ficam só na rede interna
+	@internal path /actuator/prometheus /actuator/info
+	respond @internal 404
+
+	reverse_proxy pedido-certo-api:8080 {
+		# repassa os eventos SSE na hora, sem bufferizar
+		flush_interval -1
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

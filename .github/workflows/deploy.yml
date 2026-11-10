@@ -1,0 +1,85 @@
+name: Deploy da API
+
+# Publica a imagem da API no GitHub Container Registry e atualiza a VPS.
+# O painel não passa por aqui: a Vercel publica a pasta web/ sozinha a cada push.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Imagem Docker
+    # só publica se o CI passou
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - id: meta
+        run: echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: api
+          push: true
+          tags: |
+            ghcr.io/joaooliveira07/pedido-certo-api:${{ steps.meta.outputs.tag }}
+            ghcr.io/joaooliveira07/pedido-certo-api:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  vps:
+    name: Atualizar a VPS
+    needs: image
+    runs-on: ubuntu-latest
+    environment:
+      name: producao
+      url: https://api-pedidos.jopes.com.br/actuator/health
+    steps:
+      - uses: appleboy/ssh-action@v1.2.0
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          TAG: ${{ needs.image.outputs.tag }}
+          REPO: ${{ github.repository }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: SHA,TAG,REPO
+          script: |
+            set -euo pipefail
+            cd /opt/jopes
+            base="https://raw.githubusercontent.com/$REPO/$SHA/infra/vps"
+            curl -fsSL "$base/compose.yml" -o compose.yml
+            curl -fsSL "$base/Caddyfile" -o Caddyfile
+            curl -fsSL "$base/backup.sh" -o backup.sh && chmod +x backup.sh
+            sed -i "s/^API_TAG=.*/API_TAG=$TAG/" .env
+            docker compose pull --quiet
+            docker compose up -d --remove-orphans
+            docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+            # espera a API responder antes de declarar sucesso
+            for i in $(seq 1 30); do
+              if curl -fsS https://api-pedidos.jopes.com.br/actuator/health/readiness | grep -q UP; then
+                echo "API no ar com a versão $TAG"; docker image prune -f >/dev/null; exit 0
+              fi
+              sleep 3
+            done
+            echo "A API não ficou pronta em 90 s"; docker compose logs --tail 80 pedido-certo-api; exit 1

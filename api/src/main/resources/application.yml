@@ -1,0 +1,59 @@
+spring:
+  application:
+    name: pedido-certo-api
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/pedidocerto}
+    username: ${DATABASE_USER:pedidocerto}
+    password: ${DATABASE_PASSWORD:pedidocerto}
+    hikari:
+      maximum-pool-size: 10
+  mvc:
+    problemdetails:
+      enabled: true
+  jackson:
+    default-property-inclusion: always
+  task:
+    scheduling:
+      pool:
+        size: 3
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: ${PORT:8080}
+  forward-headers-strategy: framework
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+app:
+  relay:
+    enabled: true
+    interval-ms: 500
+    batch-size: 10
+    lease: 30s
+    max-attempts: 6
+    base-delay: 1s
+    max-delay: 20s
+  chaos:
+    failure-rate: 0.2
+    ack-loss-rate: 0.15
+    duplicate-rate: 0.25
+    latency-ms: 150
+  pix:
+    webhook-secret: ${PIX_WEBHOOK_SECRET:segredo-local-de-desenvolvimento}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+  demo:
+    enabled: true
+    retention: 24h
+    retention-check-ms: 600000
